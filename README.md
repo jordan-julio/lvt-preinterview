@@ -1,7 +1,7 @@
 # lvt-preinterview
 Website Link: 
 
-#install necessary modules
+# install necessary modules
 ```npm i```
 
 # start frontend
