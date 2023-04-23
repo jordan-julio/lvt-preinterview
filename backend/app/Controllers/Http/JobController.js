@@ -1,15 +1,42 @@
 'use strict'
 
 const Job = use('App/Models/Job')
+const { storage, storeImage } = require('../../../config/gcs')
 
 class JobController {
-  async index ({ request, response }) {
-    const jobs = await Job.query().fetch()
+  async index ({ request, auth, response }) {
+    try {
+      await auth.check()
+      const user = await auth.getUser()
+      if (user.type === 'Maker') {
+        // Your existing code to fetch jobs and send response
+        const jobs = await Job.query().fetch()
+        return response.json(jobs)
+      } else {
+        // User does not have the role "maker", send error response
+        return response.status(403).json({ error: 'Forbidden' })
+      }
+    } catch (error) {
+      // Token is invalid, send error response
+      return response.status(401).json({ error: 'Invalid token' })
+    }
+  }
+  
+  async getUserType ({ auth, response }) {
+    try {
+      // Verify if user is authenticated and get the user
+      await auth.check()
+      const user = await auth.getUser()
 
-    return response.json(jobs)
+      // Return user type
+      return response.json({ type: user.type })
+    } catch (error) {
+      // Token is invalid, send error response
+      return response.status(401).json({ error: 'Invalid token' })
+    }
   }
 
-  async store ({ request, response }) {
+  async store({ request, response }) {
     const data = request.only([
       'first_name',
       'last_name',
@@ -19,23 +46,45 @@ class JobController {
       'postcode',
       'state',
       'clothing_type',
+      'thumbnail',
+      'images',
       'description',
-      'budget'
+      'budget',
+      'user_id'
     ])
-
+  
+    // Upload thumbnail image  
+    // Convert the base64 thumbnail to buffer and store in Google Cloud Storage
+    if (data.thumbnail !== undefined) {
+      const thumbnailUrl = await storeImage(data.thumbnail[0])
+      data.thumbnail = JSON.stringify(thumbnailUrl) // Store the thumbnail URL
+    }
+    
+    if (data.images !== undefined) {
+      const imageUrls = await Promise.all(data.images.map(async (image) => {
+        const imageUrl = await storeImage(image)
+        return imageUrl
+      }))
+      data.images = JSON.stringify(imageUrls) // Store the image URLs as JSON string
+    }
     const job = await Job.create(data)
-
+  
     return response.status(201).json(job)
   }
+  
 
-  async show ({ params, response }) {
-    const job = await Job.find(params.id)
-
-    if (!job) {
-      return response.status(404).json({ message: 'Job not found' })
+  async show({ params, response }) {
+    try {
+      const job = await Job.find(params.id)
+  
+      if (!job) {
+        return response.status(404).json({ message: 'Job not found' })
+      }
+  
+      return response.json(job)
+    } catch (error) {
+      return response.status(500).json({ error: 'Internal Server Error' })
     }
-
-    return response.json(job)
   }
 
   async update ({ params, request, response }) {
@@ -75,6 +124,18 @@ class JobController {
 
     return response.json({ message: 'Job deleted' })
   }
+
+  async jobsByUser({ params, response }) {
+    try {
+      // Fetch jobs made by the specific user
+      const jobs = await Job.query().where('user_id', params.id).fetch()
+  
+      return response.json(jobs)
+    } catch (error) {
+      return response.status(500).json({ error: 'Internal Server Error' })
+    }
+  }
+  
 }
 
 module.exports = JobController

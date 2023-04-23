@@ -16,7 +16,10 @@ class Job extends Model {
           'clothing_type',
           'images',
           'description',
-          'budget'
+          'budget',
+          'user_id',
+          'taken_by',
+          'thumbnail'
         ]
     }
 }
